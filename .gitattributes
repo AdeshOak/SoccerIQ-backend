@@ -1,0 +1,6 @@
+Files/models/events_df.pkl filter=lfs diff=lfs merge=lfs -text
+Files/models/model.sav filter=lfs diff=lfs merge=lfs -text
+Files/models/shots.pkl filter=lfs diff=lfs merge=lfs -text
+Files/events.csv filter=lfs diff=lfs merge=lfs -text
+Files/ginf.csv filter=lfs diff=lfs merge=lfs -text
+Files/players_22.csv filter=lfs diff=lfs merge=lfs -text
