@@ -48,8 +48,8 @@ CORS(app)
 
 def data_cleaning_feature1():
 
-    events = pd.read_csv('Files/events.csv')
-    ginf = pd.read_csv('Files/ginf.csv')
+    events = pd.read_csv('../Files/events.csv')
+    ginf = pd.read_csv('../Files/ginf.csv')
 
     event_types = {1:'Attempt', 2:'Corner', 3:'Foul', 4:'Yellow card', 5:'Second yellow card', 6:'Red card', 7:'Substitution', 8:'Free kick won', 9:'Offside', 10:'Hand ball', 11:'Penalty conceded'}
 
@@ -97,16 +97,16 @@ def data_cleaning_feature1():
 
 
     print("writing to file events.pkl .......")
-    events.to_pickle("Files/models/events_df.pkl") 
+    events.to_pickle("../Files/models/events_df.pkl") 
 events = None
 
 def load_models():
     global events
     try:
-        events = pd.read_pickle("Files/models/events_df.pkl") 
+        events = pd.read_pickle("../Files/models/events_df.pkl") 
     except:
         data_cleaning_feature1()
-        events = pd.read_pickle("Files/models/events_df.pkl") 
+        events = pd.read_pickle("../Files/models/events_df.pkl") 
 
     return "Loaded"
 
@@ -124,7 +124,7 @@ def feature1_output():
     data = request.get_json()
     team = data['team']
 
-    events =  pd.read_pickle("Files/models/events_df.pkl") 
+    events =  pd.read_pickle("../Files/models/events_df.pkl") 
     response = Response(mimetype='application/json')
 
     filtered_team = events[events['event_team']==team]
@@ -231,8 +231,8 @@ def data_cleansing_feature2():
         UNDERLINE = '\033[4m'
         END = '\033[0m'
 
-    events_f2 = pd.read_csv('Files/events.csv')
-    info_f2 = pd.read_csv('Files/ginf.csv')
+    events_f2 = pd.read_csv('../Files/events.csv')
+    info_f2 = pd.read_csv('../Files/ginf.csv')
     events_f2 = events_f2.merge(info_f2[['id_odsp', 'country', 'date']], on='id_odsp', how='left')
     extract_year = lambda x: datetime.strptime(x, "%Y-%m-%d").year
     events_f2['year'] = [extract_year(x) for key, x in enumerate(events_f2['date'])]
@@ -319,7 +319,7 @@ def train_model_f2():
     
     shots['prediction'] = model.predict_proba(X)[:, 1]
     shots['difference'] = shots['prediction'] - shots['is_goal']
-    shots.to_pickle('Files/models/shots.pkl')
+    shots.to_pickle('../Files/models/shots.pkl')
     return True
 
 @app.route('/clean_train_model_f2')
@@ -337,7 +337,7 @@ def expected_goal():
     pass
     response = Response(mimetype='application/json')
 
-    shots = pd.read_pickle("Files/models/shots.pkl") 
+    shots = pd.read_pickle("../Files/models/shots.pkl") 
 
 
     team_name = "All"
@@ -393,7 +393,7 @@ def expected_goal():
         ax.set_yticklabels(labels=ax.get_yticklabels(), fontsize=12)
         plt.title("Best Finishers: most goals on top of expected", fontsize=20, fontfamily='serif')
         ax.grid(color='black', linestyle='-', linewidth=0.1, alpha=0.8, axis='x')
-        ##plt.savefig('../Files/images/F2_BestFinishers.png')
+        plt.savefig('../Files/images/F2_BestFinishers.png')
 
 
 
@@ -468,7 +468,7 @@ def expected_goal():
 def get_best_team(nationality, chosen_tactic,cc):
     print('=======================================')
     print(nationality,chosen_tactic,cc)
-    df = pd.read_csv('Files/players_22.csv')
+    df = pd.read_csv('../Files/players_22.csv')
     df.dob=pd.to_datetime(df.dob)
 
     df.loc[:, 'main_position'] = df['player_positions'].apply(lambda x: x.split(',')[0])
@@ -602,7 +602,7 @@ def feature4():
         initial_overall=int(request.args.get('intial_overall'))
 
 
-    df = pd.read_csv('Files/players_22.csv')
+    df = pd.read_csv('../Files/players_22.csv')
     df.dob=pd.to_datetime(df.dob)
     df.loc[:, 'main_position'] = df['player_positions'].apply(lambda x: x.split(',')[0])
 
@@ -639,6 +639,7 @@ def feature4():
     response.data=json.dumps({'result':res})
 
     return response
+
 
 
 
