@@ -553,6 +553,8 @@ def feature4():
     initial_overall = 80
     if 'initial_overall' in request.args:
         initial_overall = int(request.args.get('initial_overall'))
+    
+    print("initial_overall recieved:" + initial_overall)
 
     # Load players data from S3
     bucket_name = os.environ.get('S3_BUCKET_NAME')
@@ -562,15 +564,18 @@ def feature4():
     df.dob = pd.to_datetime(df.dob)
     df.loc[:, 'main_position'] = df['player_positions'].apply(lambda x: x.split(',')[0])
 
-    data = df
-    data['overall_diff'] = data.potential - data.overall
-    data.sort_values(['overall_diff'], ascending=False, inplace=True)
+    # Calculate overall difference
+    df['overall_diff'] = df['potential'] - df['overall']
     
     # Filter players based on initial overall threshold
-    filtered_data = data.loc[data.overall >= initial_overall, 
-                             ['main_position', 'short_name', 'club_name', 'player_face_url', 'overall', 'potential', 'age', 'height_cm', 'weight_kg']]
-    top_players = filtered_data.head(10).sort_values(by=['potential'], ascending=False)
+    filtered_data = df[df['overall'] >= initial_overall]
     
+    # Sort by overall difference and potential
+    filtered_data.sort_values(by=['overall_diff', 'potential'], ascending=[False, False], inplace=True)
+    
+    # Select the top 10 players
+    top_players = filtered_data.head(10)
+
     # Convert to JSON response format
     result = []
     for idx, player in top_players.iterrows():
@@ -587,7 +592,7 @@ def feature4():
         })
     
     response = Response(mimetype='application/json')
-    response.status = status.HTTP_200_OK
+    response.status = 200
     response.data = json.dumps({'result': result})
 
     return response
