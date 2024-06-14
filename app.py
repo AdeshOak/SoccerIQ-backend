@@ -554,7 +554,7 @@ def feature4():
     if 'initial_overall' in request.args:
         initial_overall = int(request.args.get('initial_overall'))
     
-    print("initial_overall recieved:" + initial_overall)
+
 
     # Load players data from S3
     bucket_name = os.environ.get('S3_BUCKET_NAME')
