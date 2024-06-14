@@ -548,48 +548,47 @@ def feature3():
 
 ####-----------------------------------------------------------------------
 
-@app.route('/feature4',methods=['POST'])
+@app.route('/feature4', methods=['POST'])
 def feature4():
-    initial_overall=80
-    if 'intial_overall' in request.args:
-        initial_overall=int(request.args.get('intial_overall'))
+    initial_overall = 80
+    if 'initial_overall' in request.args:
+        initial_overall = int(request.args.get('initial_overall'))
 
-
-    df = pd.read_csv('Files/players_22.csv')
-    df.dob=pd.to_datetime(df.dob)
+    # Load players data from S3
+    bucket_name = os.environ.get('S3_BUCKET_NAME')
+    players_file_key = "Files/players_22.csv"
+    df = download_data_from_s3(bucket_name, players_file_key)
+    
+    df.dob = pd.to_datetime(df.dob)
     df.loc[:, 'main_position'] = df['player_positions'].apply(lambda x: x.split(',')[0])
-
 
     data = df
     data['overall_diff'] = data.potential - data.overall
+    data.sort_values(['overall_diff'], ascending=False, inplace=True)
     
-    data.sort_values(['overall_diff'], ascending = False, inplace = True)
+    # Filter players based on initial overall threshold
+    filtered_data = data.loc[data.overall >= initial_overall, 
+                             ['main_position', 'short_name', 'club_name', 'player_face_url', 'overall', 'potential', 'age', 'height_cm', 'weight_kg']]
+    top_players = filtered_data.head(10).sort_values(by=['potential'], ascending=False)
     
-    l = data.loc[data.overall >= initial_overall, ['main_position','short_name','club_name','player_face_url','overall','potential', 'age', 'height_cm', 'weight_kg']].head(10).sort_values(by=['potential'],ascending=False)
+    # Convert to JSON response format
+    result = []
+    for idx, player in top_players.iterrows():
+        result.append({
+            'position': player['main_position'],
+            'Name': player['short_name'],
+            'club_name': player['club_name'],
+            'Faceurl': player['player_face_url'],
+            'Overall': int(player['overall']),
+            'Potential': int(player['potential']),
+            'Age': int(player['age']),
+            'height_cm': float(player['height_cm']),
+            'weight_kg': float(player['weight_kg'])
+        })
     
-    temp = l.to_dict()
-
-
-    k = temp['short_name'].keys()
-    res=[]
-    for i in k:
-                res.append(
-                {
-                'position':temp['main_position'][i],
-                'Name':temp['short_name'][i],
-                'club_name':temp['club_name'][i],
-                'Faceurl': temp['player_face_url'][i],
-                'Overall': temp['overall'][i],
-                 'Potential':temp['potential'][i]  ,   
-                    'Age':temp['age'][i],
-                    'height_cm':float(temp['height_cm'][i]),
-                    'weight_kg':float(temp['weight_kg'][i])
-                })
-
-
     response = Response(mimetype='application/json')
-    response.status=status.HTTP_200_OK
-    response.data=json.dumps({'result':res})
+    response.status = status.HTTP_200_OK
+    response.data = json.dumps({'result': result})
 
     return response
 
