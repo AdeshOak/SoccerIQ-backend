@@ -424,70 +424,64 @@ def expected_goal():
 
 
 
-def get_best_team(nationality, chosen_tactic,cc):
+def get_best_team(nationality, chosen_tactic, cc):
     print('=======================================')
-    print(nationality,chosen_tactic,cc)
-    df = pd.read_csv('Files/players_22.csv')
-    df.dob=pd.to_datetime(df.dob)
-
+    print(nationality, chosen_tactic, cc)
+    
+    # Load players data from S3
+    bucket_name = os.environ.get('S3_BUCKET_NAME')
+    players_file_key = "Files/players_22.csv"
+    df = download_data_from_s3(bucket_name, players_file_key)
+    
+    df.dob = pd.to_datetime(df.dob)
     df.loc[:, 'main_position'] = df['player_positions'].apply(lambda x: x.split(',')[0])
     data = df
     best_team = []
     shortlisted = []
-
     
     for i in chosen_tactic['positions']:
         if cc == "country":
             print("call on country")
-            potential_players = data[(data['nationality_name'] == nationality) 
-                                    & (data['player_positions'].str.contains(i))
-                                            ].sort_values(['overall'], ascending=False)
+            potential_players = data[(data['nationality_name'] == nationality) & (data['player_positions'].str.contains(i))].sort_values(['overall'], ascending=False)
         else:
             print("call on club")
-            potential_players = data[(data['club_name'] == nationality) 
-                                    & (data['player_positions'].str.contains(i))
-                                            ].sort_values(['overall'], ascending=False)
+            potential_players = data[(data['club_name'] == nationality) & (data['player_positions'].str.contains(i))].sort_values(['overall'], ascending=False)
+        
         print(potential_players.head())
+        
         try:
             ind = 0
-
             while potential_players.iloc[ind].short_name in shortlisted:
-                ind +=1
-        
+                ind += 1
+            
             shortlisted.append(potential_players.iloc[ind].short_name)
-            best_team.append(
-                {
-                'position':i,
-                'Name':potential_players.iloc[ind].short_name,
-                'club_name':potential_players.iloc[ind].club_name,
+            best_team.append({
+                'position': i,
+                'Name': potential_players.iloc[ind].short_name,
+                'club_name': potential_players.iloc[ind].club_name,
                 'Faceurl': potential_players.iloc[ind].player_face_url,
                 'Overall': int(potential_players.iloc[ind].overall),
-                 'Potential':int(potential_players.iloc[ind].potential   )  ,   
-                    'Age':int(potential_players.iloc[ind].age),
-                    'height_cm':float(potential_players.iloc[ind].height_cm),
-                    'weight_kg':float(potential_players.iloc[ind].weight_kg)
-                }
-                              
-                              
-                              )
-
+                'Potential': int(potential_players.iloc[ind].potential),
+                'Age': int(potential_players.iloc[ind].age),
+                'height_cm': float(potential_players.iloc[ind].height_cm),
+                'weight_kg': float(potential_players.iloc[ind].weight_kg)
+            })
 
         except Exception as e:
             best_team.append({
-                'position':i,
-                'Name':"",
-                'club_name':"",
+                'position': i,
+                'Name': "",
+                'club_name': "",
                 'Faceurl': "",
                 'Overall': "",
-                 'Potential':  ""     ,   
-                    'Age':"",
-                    'height_cm':"",
-                    'weight_kg':""
-                })
+                'Potential': "",
+                'Age': "",
+                'height_cm': "",
+                'weight_kg': ""
+            })
+    
     print(best_team)
     return best_team
-    
-
 
 
 
@@ -523,31 +517,31 @@ def feature3():
     elif tactic == "352":
         send_tactic = tactic_352
     else:
-        tactic = request.args.get('tactic')
-        positionlist=[]
+        positionlist = []
         for k in range(11):
-            ar = 'position['+str(k)+'][value]'
+            ar = 'position[' + str(k) + '][value]'
             positionlist.append(request.args.get(ar))
-
-        print('poslist',positionlist)
+        
+        print('poslist', positionlist)
         custom_tactic = {
-        'name': str(tactic),
-        'positions': positionlist
+            'name': str(tactic),
+            'positions': positionlist
         }
         send_tactic = custom_tactic
-
-
-    print("Send tactic is :",send_tactic)
-
+    
+    print("Send tactic is :", send_tactic)
+    
     if 'country' in request.args:
         country = request.args.get('country')
-        res = get_best_team(country,send_tactic,'country')
+        res = get_best_team(country, send_tactic, 'country')
     else:
         club = request.args.get('club')
-        res = get_best_team(club,send_tactic,'club')
-    print(res,type(res))    
+        res = get_best_team(club, send_tactic, 'club')
+    
+    print(res, type(res))
     response.status = status.HTTP_200_OK
-    response.data = json.dumps({'result':res})
+    response.data = json.dumps({'result': res})
+    
     return response
 
 
