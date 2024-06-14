@@ -373,14 +373,16 @@ def expected_goal():
 
     elif sub_feature == "Most Expected Goals":
         show = players[['player', 'trueGoals', 'expectedGoals']].sort_values(['expectedGoals'], ascending=False).head(10)
-        temp = show.to_dict()
-        td = {}
-        for i in range(len(temp['player'])):
-            td['player'] = temp['player'][i]
-            td['trueGoals'] = temp['trueGoals'][i]
-            td['expectedGoals'] = temp['expectedGoals'][i]
+        temp = show.to_dict(orient='records')  # Convert to list of dictionaries
+        res = []
+
+        for i, entry in enumerate(temp):
+            td = {
+                'player': entry['player'],
+                'trueGoals': entry['trueGoals'],
+                'expectedGoals': entry['expectedGoals']
+            }
             res.append(td)
-            td = {}
 
         response.status = status.HTTP_200_OK
         response.data = json.dumps({"result": res})
