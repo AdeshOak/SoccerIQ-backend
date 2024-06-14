@@ -40,73 +40,93 @@ from sklearn.preprocessing import StandardScaler
 from hyperopt import fmin, tpe, hp, STATUS_OK, Trials
 from flask_cors import CORS
 
+
+##use amazon database for storage of models & csv files
+import boto3
+from botocore.exceptions import NoCredentialsError
+from io import BytesIO
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", None)
 CORS(app)
 
 
+def download_data_from_s3(bucket_name, s3_file_key):
+    s3 = boto3.client('s3',
+                      aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                      aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+    obj = s3.get_object(Bucket=bucket_name, Key=s3_file_key)
+    return pd.read_csv(BytesIO(obj['Body'].read()))
+
+def upload_pickle_to_s3(data, bucket_name, s3_file_key):
+    s3 = boto3.client('s3',
+                      aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                      aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+    with BytesIO() as f:
+        data.to_pickle(f)
+        f.seek(0)
+        s3.upload_fileobj(f, bucket_name, s3_file_key)
+
+
+def download_pickle_from_s3(bucket_name, s3_file_key):
+    s3 = boto3.client('s3',
+                      aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                      aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+    obj = s3.get_object(Bucket=bucket_name, Key=s3_file_key)
+    return pd.read_pickle(BytesIO(obj['Body'].read()))
+
 def data_cleaning_feature1():
+    bucket_name = os.environ.get('S3_BUCKET_NAME')
+    events_file_key = 'Files/events.csv'
+    ginf_file_key = 'Files/ginf.csv'
 
-    events = pd.read_csv('Files/events.csv')
-    ginf = pd.read_csv('Files/ginf.csv')
+    # Download data from S3
+    events = download_data_from_s3(bucket_name, events_file_key)
+    ginf = download_data_from_s3(bucket_name, ginf_file_key)
 
+    # Define mappings for cleaning
     event_types = {1:'Attempt', 2:'Corner', 3:'Foul', 4:'Yellow card', 5:'Second yellow card', 6:'Red card', 7:'Substitution', 8:'Free kick won', 9:'Offside', 10:'Hand ball', 11:'Penalty conceded'}
-
     event_types2 = {12:'Key Pass', 13:'Failed through ball', 14:'Sending off', 15:'Own goal'}
-
     sides = {1:'Home', 2:'Away'}
-
     shot_places = {1:'Bit too high', 2:'Blocked', 3:'Bottom left corner', 4:'Bottom right corner', 5:'Centre of the goal', 6:'High and wide', 7:'Hits the bar', 8:'Misses to the left', 9:'Misses to the right', 10:'Too high', 11:'Top centre of the goal', 12:'Top left corner', 13:'Top right corner'}
-
     shot_outcomes = {1:'On target', 2:'Off target', 3:'Blocked', 4:'Hit the bar'}
-
     locations = {1:'Attacking half', 2:'Defensive half', 3:'Centre of the box', 4:'Left wing', 5:'Right wing', 6:'Difficult angle and long range', 7:'Difficult angle on the left', 8:'Difficult angle on the right', 9:'Left side of the box', 10:'Left side of the six yard box', 11:'Right side of the box', 12:'Right side of the six yard box', 13:'Very close range', 14:'Penalty spot', 15:'Outside the box', 16:'Long range', 17:'More than 35 yards', 18:'More than 40 yards', 19:'Not recorded'}
-
     bodyparts = {1:'right foot', 2:'left foot', 3:'head'}
-
-    assist_methods = {0:np.nan, 1:'Pass', 2:'Cross', 3:'Headed pass', 4:'Through ball'}
-
+    assist_methods = {0:pd.NA, 1:'Pass', 2:'Cross', 3:'Headed pass', 4:'Through ball'}
     situations = {1:'Open play', 2:'Set piece', 3:'Corner', 4:'Free kick'}
 
+    # Perform data cleaning and mapping
     events['event_type'] = events['event_type'].map(event_types)
-
     events['event_type2'] = events['event_type2'].map(event_types2)
-
     events['side'] = events['side'].map(sides)
-
     events['shot_place'] = events['shot_place'].map(shot_places)
-
     events['shot_outcome'] = events['shot_outcome'].map(shot_outcomes)
-
     events['location'] = events['location'].map(locations)
-
     events['bodypart'] = events['bodypart'].map(bodyparts)
-
     events['assist_method'] = events['assist_method'].map(assist_methods)
-
     events['situation'] = events['situation'].map(situations)
 
+    # Define categorical columns
     cats = ['id_odsp', 'event_type', 'player', 'player2', 'event_team', 'opponent', 'shot_place', 'shot_outcome', 'location', 'bodypart', 'assist_method', 'situation']
+    d = {cat: 'category' for cat in cats}
 
-    d = dict.fromkeys(cats,'category')
-
+    # Convert columns to categorical
     events = events.astype(d)
+    events['is_goal'] = events['is_goal'].astype('bool')
 
-    events['is_goal'] = events['is_goal'].astype('bool') 
+    # Upload processed DataFrame to S3 as a .pkl file
+    upload_pickle_to_s3(events, bucket_name, 'Files/models/events_df.pkl')
 
+events=None
 
-    print("writing to file events.pkl .......")
-    events.to_pickle("Files/models/events_df.pkl") 
-events = None
 
 def load_models():
     global events
     try:
-        events = pd.read_pickle("Files/models/events_df.pkl") 
-    except:
-        data_cleaning_feature1()
-        events = pd.read_pickle("Files/models/events_df.pkl") 
-
+        events = download_pickle_from_s3(os.environ.get('S3_BUCKET_NAME'), 'Files/models/events_df.pkl')
+    except Exception as e:
+        print(f"Error loading model from S3: {e}")
+        events = None
     return "Loaded"
 
 @app.route('/')
@@ -114,93 +134,47 @@ def index():
     return "Hello SCIQ"
 
 
-@app.route('/feature1',methods=['POST'])
+@app.route('/feature1', methods=['POST'])
 def feature1_output():
-    load_models()
+    load_models()  # Ensure events DataFrame is loaded from S3
     global events
-
-
+    
     data = request.get_json()
     team = data['team']
 
-    events =  pd.read_pickle("Files/models/events_df.pkl") 
-    response = Response(mimetype='application/json')
+    if events is None:
+        return Response(status=500, mimetype='application/json', response=json.dumps({'error': 'Events data not loaded'}))
 
-    filtered_team = events[events['event_team']==team]
+    filtered_team = events[events['event_team'] == team]
 
+    goals = filtered_team[filtered_team['is_goal'] == True]['time'].value_counts().sort_index()
+    substitutions = filtered_team[filtered_team['event_type'] == 'Substitution']['time'].value_counts().sort_index()
+    red_cards = filtered_team[filtered_team['event_type'] == 'Red card']['time'].value_counts().sort_index()
+    yellow_cards = filtered_team[filtered_team['event_type'].isin(['Yellow card', 'Second yellow card'])]['time'].value_counts().sort_index()
 
-    goals = filtered_team[filtered_team['is_goal'] == True]
-    gt =goals['time'].value_counts()
-    t =gt.to_dict()
-    t = dict(sorted(t.items()))
-
-    graph1res={
-        'labels':[],
-        'data':[]
+    graph1res = {
+        'labels': goals.index.tolist(),
+        'data': goals.values.tolist()
     }
-    for k in t.keys():
-        graph1res['labels'].append(k)
-        graph1res['data'].append(t[k])
 
-    print(gt)
-    substitutions = filtered_team[filtered_team['event_type'] == 'Substitution'] # selects substitutions
-    st = substitutions['time'].value_counts()
-    print(st)
-    t1 =st.to_dict()
-    t1 = dict(sorted(t1.items()))
-
-    graph2res={
-        'labels':[],
-        'data':[]
+    graph2res = {
+        'labels': substitutions.index.tolist(),
+        'data': substitutions.values.tolist()
     }
-    for k in t1.keys():
-        graph2res['labels'].append(k)
-        graph2res['data'].append(t1[k])
 
-
-    redCards = filtered_team[filtered_team['event_type'] == 'Red card'] # selects red cards
-
-    rt = redCards['time'].value_counts()
-
-    t2 =rt.to_dict()
-    t2 = dict(sorted(t2.items()))
-
-    graph3res={
-        'labels':[],
-        'data':[]
+    graph3res = {
+        'labels': red_cards.index.tolist(),
+        'data': red_cards.values.tolist()
     }
-    for k in t2.keys():
-        graph3res['labels'].append(k)
-        graph3res['data'].append(t2[k])
 
+    graph4res = {
+        'labels': yellow_cards.index.tolist(),
+        'data': yellow_cards.values.tolist()
+    }
+
+    response = Response(status=200, mimetype='application/json')
+    response.data = json.dumps({'graph1': graph1res, 'graph2': graph2res, 'graph3': graph3res, 'graph4': graph4res})
     
-    yellowCards = filtered_team[filtered_team['event_type'] == ('Yellow card' or 'Second yellow card')] # selects yellow cards
-    yt = yellowCards['time'].value_counts()
-
-    t3 =yt.to_dict()
-    t3 = dict(sorted(t3.items()))
-
-    graph4res={
-        'labels':[],
-        'data':[]
-    }
-    for k in t3.keys():
-        graph4res['labels'].append(k)
-        graph4res['data'].append(t3[k])
-    
-    print(100*'-')
-    print(graph1res)
-    print(100*'-')
-    print(graph2res)
-    print(100*'-')
-    print(graph3res)
-    print(100*'-')
-    print(graph4res)
-
-
-    response.status=status.HTTP_200_OK
-    response.data = json.dumps({'grpah1':graph1res,'graph2':graph2res,'graph3':graph3res,'graph4':graph4res})
-
     return response
 
 
