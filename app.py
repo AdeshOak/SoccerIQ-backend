@@ -568,7 +568,7 @@ def feature4():
     df['overall_diff'] = df['potential'] - df['overall']
     
     # Filter players based on initial overall threshold
-    filtered_data = df[df['overall'] >= initial_overall]
+    filtered_data = df[df['overall'] == initial_overall]
     
     # Sort by overall difference and potential
     filtered_data.sort_values(by=['overall_diff', 'potential'], ascending=[False, False], inplace=True)
